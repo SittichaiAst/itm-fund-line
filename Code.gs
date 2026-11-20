@@ -262,18 +262,21 @@ function apiCheckUser(body) {
   var lineUserId = authenticateLineUser_(body);
   var member = findMemberByLineUserId_(lineUserId);
   var config = getPublicConfig_();
+  var plan = getPublicPlan_();
 
   if (member) {
     return {
       status: 'bound',
       member: publicMember_(member),
-      bank: config
+      bank: config,
+      plan: plan
     };
   }
 
   return {
     status: 'unbound',
-    bank: config
+    bank: config,
+    plan: plan
   };
 }
 
@@ -341,7 +344,12 @@ function apiBindUser(body) {
     sheet.getRange(rowIndex, 4, 1, 3).setValues([[lineUserId, displayName, now]]);
 
     var member = findMemberByLineUserId_(lineUserId);
-    return { status: 'success', member: publicMember_(member), bank: getPublicConfig_() };
+    return {
+      status: 'success',
+      member: publicMember_(member),
+      bank: getPublicConfig_(),
+      plan: getPublicPlan_()
+    };
   } finally {
     lock.releaseLock();
   }
@@ -431,7 +439,8 @@ function apiGetMyTransactions(body) {
   return {
     status: 'success',
     member: publicMember_(member),
-    transactions: list
+    transactions: list,
+    plan: getPublicPlan_()
   };
 }
 
@@ -556,6 +565,34 @@ function getPaymentPlanConfig_() {
     monthlyAmount: monthly,
     planMonths: Math.floor(months),
     startDate: startDate
+  };
+}
+
+/**
+ * Public plan snapshot for LIFF progress bar.
+ * Returns null when Config incomplete or before plan_start_date (hide bar).
+ */
+function getPublicPlan_() {
+  var plan;
+  try {
+    plan = getPaymentPlanConfig_();
+  } catch (err) {
+    return null;
+  }
+  var monthIndex = calcPlanMonthIndex_(plan.startDate, new Date(), plan.planMonths);
+  if (monthIndex < 1) {
+    return null;
+  }
+  var planTotal = plan.monthlyAmount * plan.planMonths;
+  var expected = monthIndex * plan.monthlyAmount;
+  var tz = Session.getScriptTimeZone() || 'Asia/Bangkok';
+  return {
+    monthly_amount: plan.monthlyAmount,
+    plan_months: plan.planMonths,
+    plan_start_date: Utilities.formatDate(plan.startDate, tz, 'yyyy-MM-dd'),
+    month_index: monthIndex,
+    expected_to_date: expected,
+    plan_total: planTotal
   };
 }
 

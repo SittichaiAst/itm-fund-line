@@ -17,6 +17,7 @@ Status: agreed via grill session; this doc overrides the SRS where they conflict
 | Wrong bind | Unbind only via Sheet menu |
 | First bind UX | Type `member_id` only → lookup → confirm name (no full unbound roster) |
 | Arrears reminder | Config `monthly_amount` / `plan_months` / `plan_start_date`; menu ส่งเตือนคนค้าง; log `Reminders` + LINE push |
+| Plan progress UI | Bar = Approved Total / Plan Total; marker = Expected To Date; hide if plan not started / Config incomplete |
 | Bank account | `Config` sheet tab (editable without redeploy) |
 | Notify | No chat message on successful submit; Messaging API push on **Reject** only |
 | History | Member sees own transactions (Pending / Approved / Rejected + reason) |

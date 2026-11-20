@@ -140,6 +140,46 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+    .progress-track {
+      position: relative;
+      height: 0.65rem;
+      border-radius: 999px;
+      background: #0b1733;
+      border: 1px solid var(--line);
+      overflow: visible;
+      margin-top: 0.75rem;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #c9a84a, var(--gold));
+      transition: width .35s ease;
+    }
+    .progress-marker {
+      position: absolute;
+      top: -4px;
+      bottom: -4px;
+      width: 2px;
+      background: var(--cream);
+      border-radius: 2px;
+      box-shadow: 0 0 0 2px #0b173388;
+      transform: translateX(-50%);
+      left: 0%;
+      transition: left .35s ease;
+    }
+    .progress-marker:after {
+      content: '';
+      position: absolute;
+      top: -5px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--gold);
+      border: 2px solid var(--cream);
+    }
   </style>
 </head>
 <body>
@@ -190,8 +230,16 @@
         <p class="text-lg font-semibold" id="home-name">—</p>
         <p class="text-sm" id="home-id" style="color:var(--muted)">—</p>
         <p class="mt-2 text-sm">ยอดอนุมัติสะสม
-          <span class="font-semibold" id="home-total">0.00</span> บาท
+          <span class="font-semibold" id="home-total" style="color:var(--gold)">0.00</span> บาท
         </p>
+        <div id="plan-progress" class="hidden">
+          <div class="progress-track" aria-hidden="true">
+            <div id="progress-fill" class="progress-fill"></div>
+            <div id="progress-marker" class="progress-marker"></div>
+          </div>
+          <p id="progress-line" class="text-sm mt-2" style="color:var(--muted)"></p>
+          <p id="progress-status" class="text-sm font-semibold mt-1" style="color:var(--gold)"></p>
+        </div>
       </div>
 
       <div class="panel space-y-2">
@@ -263,6 +311,7 @@
       lookupMember: null,
       member: null,
       bank: null,
+      plan: null,
       compressedSlip: null
     };
 
@@ -408,6 +457,7 @@
     async function refreshUser() {
       var data = await api('checkUser', {});
       state.bank = data.bank || null;
+      state.plan = data.plan || null;
       if (data.status === 'bound') {
         state.member = data.member;
         renderHome();
@@ -484,6 +534,7 @@
           });
           state.member = data.member;
           state.bank = data.bank || state.bank;
+          state.plan = data.plan || state.plan;
           toast('ผูกบัญชีสำเร็จ');
           renderHome();
           showView('home');
@@ -501,9 +552,44 @@
       $('home-name').textContent = state.member.full_name + (state.member.nickname ? ' (' + state.member.nickname + ')' : '');
       $('home-id').textContent = 'รหัส ' + state.member.member_id;
       $('home-total').textContent = formatMoney(state.member.total_paid);
+      renderPlanProgress(state.plan, state.member.total_paid);
       renderBank();
       $('transfer-dt').value = defaultDatetimeLocal();
       showPayPane();
+    }
+
+    function renderPlanProgress(plan, totalPaid) {
+      var box = $('plan-progress');
+      if (!plan || !(Number(plan.plan_total) > 0) || !(Number(plan.month_index) > 0)) {
+        box.classList.add('hidden');
+        return;
+      }
+      var paid = Number(totalPaid || 0);
+      var planTotal = Number(plan.plan_total);
+      var expected = Number(plan.expected_to_date || 0);
+      var pct = Math.max(0, Math.min(100, (paid / planTotal) * 100));
+      var markerPct = Math.max(0, Math.min(100, (expected / planTotal) * 100));
+      var over = paid - planTotal;
+      var arrears = Math.max(0, expected - paid);
+      var status = '';
+      if (paid >= planTotal) {
+        status = over > 0.009
+          ? 'ครบแผนแล้ว · เกิน ' + formatMoney(over) + ' บาท'
+          : 'ครบแผนแล้ว';
+      } else if (paid >= expected) {
+        status = 'ตามเป้าเดือนนี้แล้ว (เดือนที่ ' + plan.month_index + '/' + plan.plan_months + ')';
+      } else {
+        status = 'ค้างอีก ' + formatMoney(arrears) + ' บาท ถึงเป้าเดือนนี้';
+      }
+
+      $('progress-fill').style.width = pct.toFixed(1) + '%';
+      $('progress-marker').style.left = markerPct.toFixed(1) + '%';
+      $('progress-line').textContent =
+        formatMoney(paid) + ' / ' + formatMoney(planTotal) + ' บาท · '
+        + pct.toFixed(0) + '%'
+        + ' · เป้าเดือนนี้ ' + formatMoney(expected) + ' บาท';
+      $('progress-status').textContent = status;
+      box.classList.remove('hidden');
     }
 
     function renderBank() {
@@ -650,6 +736,12 @@
         if (data.member) {
           state.member = data.member;
           $('home-total').textContent = formatMoney(state.member.total_paid);
+        }
+        if (data.plan !== undefined) {
+          state.plan = data.plan;
+        }
+        if (state.member) {
+          renderPlanProgress(state.plan, state.member.total_paid);
         }
         var list = data.transactions || [];
         if (!list.length) {
