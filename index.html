@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>แจ้งชำระเงินรุ่น</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    :root {
+      --ink: #14201b;
+      --muted: #5c6b64;
+      --surface: #f3f6f4;
+      --card: #ffffff;
+      --accent: #0f766e;
+      --accent-dark: #0b5a54;
+      --danger: #b42318;
+      --warn: #b54708;
+      --ok: #067647;
+      --line: #d7e0db;
+      --bg0: #e8f0ec;
+      --bg1: #f7faf8;
+    }
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      color: var(--ink);
+      font-family: "Sarabun", "Noto Sans Thai", system-ui, sans-serif;
+      background:
+        radial-gradient(1200px 500px at 10% -10%, #d9efe6 0%, transparent 55%),
+        radial-gradient(900px 420px at 100% 0%, #e7eef5 0%, transparent 50%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+    }
+    .app {
+      max-width: 430px;
+      margin: 0 auto;
+      min-height: 100dvh;
+      padding: 1rem 1rem 2rem;
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 1rem;
+      padding: 1rem;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 3rem;
+      border-radius: 0.75rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-ghost {
+      background: transparent;
+      color: var(--accent-dark);
+      border: 1px solid var(--line);
+    }
+    .input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 0.75rem;
+      padding: 0.75rem 0.85rem;
+      background: #fff;
+      outline: none;
+    }
+    .input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(15,118,110,.15); }
+    .label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.35rem; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 0.15rem 0.55rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-pending { background: #fffaeb; color: var(--warn); }
+    .badge-approved { background: #ecfdf3; color: var(--ok); }
+    .badge-rejected { background: #fef3f2; color: var(--danger); }
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 1.25rem;
+      transform: translateX(-50%);
+      background: var(--ink);
+      color: #fff;
+      padding: 0.65rem 1rem;
+      border-radius: 999px;
+      font-size: 0.9rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s ease;
+      z-index: 50;
+    }
+    .toast.show { opacity: 1; }
+    .hidden { display: none !important; }
+    .spinner {
+      width: 2rem; height: 2rem;
+      border: 3px solid #cfe0d9;
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="mb-4">
+      <p class="text-sm" style="color:var(--muted)">ระบบแจ้งชำระเงินรุ่น</p>
+      <h1 class="text-2xl font-bold tracking-tight">โอน & ส่งสลิป</h1>
+    </header>
+
+    <section id="view-loading" class="panel flex flex-col items-center gap-3 py-10">
+      <div class="spinner"></div>
+      <p style="color:var(--muted)">กำลังตรวจสอบตัวตน…</p>
+    </section>
+
+    <section id="view-error" class="panel hidden">
+      <h2 class="font-semibold text-lg mb-2">เกิดข้อผิดพลาด</h2>
+      <p id="error-text" class="mb-4" style="color:var(--danger)"></p>
+      <button class="btn btn-primary" type="button" onclick="boot()">ลองใหม่</button>
+    </section>
+
+    <section id="view-bind" class="hidden space-y-3">
+      <div class="panel flex items-center gap-3">
+        <img id="bind-avatar" alt="" class="w-12 h-12 rounded-full object-cover bg-slate-200" />
+        <div>
+          <p class="font-semibold" id="bind-display-name">LINE user</p>
+          <p class="text-sm" style="color:var(--muted)">ลงทะเบียนยืนยันตัวตนครั้งแรก</p>
+        </div>
+      </div>
+      <div class="panel space-y-3">
+        <div>
+          <label class="label" for="member-search">ค้นหาสมาชิกที่ยังไม่ผูกบัญชี</label>
+          <input id="member-search" class="input" type="search" placeholder="รหัส / ชื่อ / ชื่อเล่น" autocomplete="off" />
+        </div>
+        <div id="member-list" class="max-h-64 overflow-y-auto space-y-2"></div>
+        <button id="btn-bind" class="btn btn-primary" type="button" disabled>ยืนยันการผูกบัญชี</button>
+      </div>
+    </section>
+
+    <section id="view-home" class="hidden space-y-3">
+      <div class="panel">
+        <p class="text-sm" style="color:var(--muted)">สมาชิกที่ผูกไว้</p>
+        <p class="text-lg font-semibold" id="home-name">—</p>
+        <p class="text-sm" id="home-id" style="color:var(--muted)">—</p>
+        <p class="mt-2 text-sm">ยอดอนุมัติสะสม
+          <span class="font-semibold" id="home-total">0.00</span> บาท
+        </p>
+      </div>
+
+      <div class="panel space-y-2">
+        <p class="font-semibold">บัญชีรับโอน</p>
+        <p id="bank-lines" class="text-sm leading-relaxed" style="color:var(--muted)">—</p>
+        <button class="btn btn-ghost" type="button" id="btn-copy-account">คัดลอกเลขบัญชี</button>
+      </div>
+
+      <div class="flex gap-2">
+        <button class="btn btn-primary" type="button" id="tab-pay">แจ้งโอน</button>
+        <button class="btn btn-ghost" type="button" id="tab-history">ประวัติ</button>
+      </div>
+
+      <div id="pane-pay" class="panel space-y-3">
+        <div>
+          <label class="label" for="amount">ยอดเงินที่โอน (บาท)</label>
+          <input id="amount" class="input" type="number" min="0.01" step="0.01" inputmode="decimal" required />
+        </div>
+        <div>
+          <label class="label" for="transfer-dt">วันและเวลาที่โอน</label>
+          <input id="transfer-dt" class="input" type="datetime-local" required />
+        </div>
+        <div>
+          <label class="label" for="slip">แนบรูปสลิป</label>
+          <input id="slip" class="input" type="file" accept="image/*" required />
+          <img id="slip-preview" alt="preview" class="mt-2 max-h-48 rounded-lg hidden w-full object-contain bg-slate-50" />
+        </div>
+        <div>
+          <label class="label" for="note">หมายเหตุ (ไม่บังคับ)</label>
+          <input id="note" class="input" type="text" maxlength="200" />
+        </div>
+        <button id="btn-submit" class="btn btn-primary" type="button">ส่งรายการ</button>
+      </div>
+
+      <div id="pane-history" class="panel hidden space-y-3">
+        <p class="font-semibold">ประวัติของฉัน</p>
+        <div id="history-list" class="space-y-2"></div>
+        <button class="btn btn-ghost" type="button" id="btn-refresh-history">รีเฟรช</button>
+      </div>
+    </section>
+
+    <section id="view-success" class="panel hidden text-center space-y-3 py-8">
+      <p class="text-lg font-semibold" style="color:var(--ok)">ส่งรายการสำเร็จ</p>
+      <p id="success-text" class="text-sm" style="color:var(--muted)"></p>
+      <button class="btn btn-primary" type="button" id="btn-success-home">กลับหน้าหลัก</button>
+      <button class="btn btn-ghost" type="button" id="btn-close">ปิดหน้าต่าง</button>
+    </section>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    /**
+     * Per-cohort deploy config.
+     * Host UI on GitHub Pages (repo root index.html).
+     * gasUrl = Apps Script Web App /exec URL (API only; not for hosting HTML).
+     * After edit: git push, wait for Pages, set LIFF Endpoint to the Pages URL.
+     */
+    const APP_CONFIG = {
+      liffId: 'YOUR_LIFF_ID',
+      gasUrl: 'YOUR_GAS_WEB_APP_URL'
+    };
+
+    const state = {
+      mock: false,
+      mockPassword: '',
+      profile: null,
+      selectedMemberId: null,
+      availableMembers: [],
+      member: null,
+      bank: null,
+      compressedSlip: null
+    };
+
+    function $(id) { return document.getElementById(id); }
+
+    function showView(id) {
+      ['loading', 'error', 'bind', 'home', 'success'].forEach(function (name) {
+        $('view-' + name).classList.toggle('hidden', name !== id);
+      });
+    }
+
+    function toast(msg) {
+      var el = $('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      setTimeout(function () { el.classList.remove('show'); }, 2200);
+    }
+
+    function qs() {
+      return new URLSearchParams(location.search);
+    }
+
+    function formatMoney(n) {
+      return Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function defaultDatetimeLocal() {
+      var d = new Date();
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 16);
+    }
+
+    async function boot() {
+      showView('loading');
+      try {
+        var params = qs();
+        state.mock = params.get('mock') === '1';
+
+        if (state.mock) {
+          state.mockPassword = params.get('pw') || window.prompt('รหัส mock (MOCK_PASSWORD)') || '';
+          state.profile = {
+            userId: params.get('uid') || 'mock-user-001',
+            displayName: params.get('name') || 'Mock User',
+            pictureUrl: ''
+          };
+        } else {
+          if (!APP_CONFIG.liffId || APP_CONFIG.liffId === 'YOUR_LIFF_ID') {
+            throw new Error('ยังไม่ได้ตั้ง LIFF ID ใน APP_CONFIG');
+          }
+          await liff.init({ liffId: APP_CONFIG.liffId });
+          if (!liff.isLoggedIn()) {
+            liff.login();
+            return;
+          }
+          state.profile = await liff.getProfile();
+        }
+
+        if (!APP_CONFIG.gasUrl || APP_CONFIG.gasUrl === 'YOUR_GAS_WEB_APP_URL') {
+          throw new Error('ยังไม่ได้ตั้ง GAS Web App URL ใน APP_CONFIG');
+        }
+
+        await refreshUser();
+      } catch (err) {
+        $('error-text').textContent = err.message || String(err);
+        showView('error');
+      }
+    }
+
+    async function api(action, payload) {
+      var body = Object.assign({ action: action }, payload || {});
+      if (state.mock) {
+        body.mock = true;
+        body.mock_password = state.mockPassword;
+        body.line_user_id = state.profile.userId;
+      } else {
+        body.id_token = liff.getIDToken();
+        body.line_user_id = state.profile.userId;
+        if (!body.id_token) {
+          throw new Error('ไม่ได้รับ LINE ID token — ตรวจ LIFF scope openid');
+        }
+      }
+
+      var res = await fetch(APP_CONFIG.gasUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(body)
+      });
+      var data = await res.json();
+      if (data.status === 'error') {
+        throw new Error(data.message || 'API error');
+      }
+      return data;
+    }
+
+    async function refreshUser() {
+      var data = await api('checkUser', {});
+      state.bank = data.bank || null;
+      if (data.status === 'bound') {
+        state.member = data.member;
+        renderHome();
+        showView('home');
+      } else {
+        state.availableMembers = data.available_members || [];
+        renderBind();
+        showView('bind');
+      }
+    }
+
+    function renderBind() {
+      $('bind-display-name').textContent = state.profile.displayName;
+      if (state.profile.pictureUrl) {
+        $('bind-avatar').src = state.profile.pictureUrl;
+      }
+      state.selectedMemberId = null;
+      $('btn-bind').disabled = true;
+      $('member-search').value = '';
+      paintMemberList(state.availableMembers);
+
+      $('member-search').oninput = function (e) {
+        var q = e.target.value.trim().toLowerCase();
+        var filtered = state.availableMembers.filter(function (m) {
+          var hay = (m.member_id + ' ' + m.full_name + ' ' + m.nickname).toLowerCase();
+          return !q || hay.indexOf(q) !== -1;
+        });
+        paintMemberList(filtered);
+      };
+
+      $('btn-bind').onclick = async function () {
+        if (!state.selectedMemberId) return;
+        $('btn-bind').disabled = true;
+        try {
+          var data = await api('bindUser', {
+            member_id: state.selectedMemberId,
+            line_display_name: state.profile.displayName
+          });
+          state.member = data.member;
+          state.bank = data.bank || state.bank;
+          toast('ผูกบัญชีสำเร็จ');
+          renderHome();
+          showView('home');
+        } catch (err) {
+          toast(err.message || String(err));
+          $('btn-bind').disabled = false;
+        }
+      };
+    }
+
+    function paintMemberList(list) {
+      var box = $('member-list');
+      box.innerHTML = '';
+      if (!list.length) {
+        box.innerHTML = '<p class="text-sm" style="color:var(--muted)">ไม่พบรายชื่อ</p>';
+        return;
+      }
+      list.forEach(function (m) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'w-full text-left panel !p-3';
+        if (state.selectedMemberId === m.member_id) {
+          btn.style.borderColor = 'var(--accent)';
+          btn.style.boxShadow = '0 0 0 2px rgba(15,118,110,.2)';
+        }
+        btn.textContent = m.member_id + ' - ' + m.full_name + ' (' + m.nickname + ')';
+        btn.onclick = function () {
+          state.selectedMemberId = m.member_id;
+          $('btn-bind').disabled = false;
+          paintMemberList(list);
+        };
+        box.appendChild(btn);
+      });
+    }
+
+    function renderHome() {
+      $('home-name').textContent = state.member.full_name + (state.member.nickname ? ' (' + state.member.nickname + ')' : '');
+      $('home-id').textContent = 'รหัส ' + state.member.member_id;
+      $('home-total').textContent = formatMoney(state.member.total_paid);
+      renderBank();
+      $('transfer-dt').value = defaultDatetimeLocal();
+      showPayPane();
+    }
+
+    function renderBank() {
+      var b = state.bank || {};
+      $('bank-lines').innerHTML =
+        (b.bank_name || '—') + '<br/>' +
+        (b.account_name || '—') + '<br/>' +
+        '<span class="font-semibold" style="color:var(--ink)">' + (b.account_no || '—') + '</span>';
+    }
+
+    function showPayPane() {
+      $('pane-pay').classList.remove('hidden');
+      $('pane-history').classList.add('hidden');
+      $('tab-pay').classList.remove('btn-ghost');
+      $('tab-pay').classList.add('btn-primary');
+      $('tab-history').classList.add('btn-ghost');
+      $('tab-history').classList.remove('btn-primary');
+    }
+
+    function showHistoryPane() {
+      $('pane-pay').classList.add('hidden');
+      $('pane-history').classList.remove('hidden');
+      $('tab-history').classList.remove('btn-ghost');
+      $('tab-history').classList.add('btn-primary');
+      $('tab-pay').classList.add('btn-ghost');
+      $('tab-pay').classList.remove('btn-primary');
+      loadHistory();
+    }
+
+    $('tab-pay').onclick = showPayPane;
+    $('tab-history').onclick = showHistoryPane;
+    $('btn-refresh-history').onclick = loadHistory;
+
+    $('btn-copy-account').onclick = async function () {
+      var no = (state.bank && state.bank.account_no) || '';
+      if (!no) {
+        toast('ยังไม่มีเลขบัญชี');
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(no);
+        toast('คัดลอกเลขบัญชีแล้ว');
+      } catch (e) {
+        toast('คัดลอกไม่สำเร็จ');
+      }
+    };
+
+    $('slip').onchange = async function (e) {
+      var file = e.target.files && e.target.files[0];
+      state.compressedSlip = null;
+      if (!file) {
+        $('slip-preview').classList.add('hidden');
+        return;
+      }
+      try {
+        state.compressedSlip = await compressImage(file, 1000, 0.8);
+        $('slip-preview').src = state.compressedSlip.dataUrl;
+        $('slip-preview').classList.remove('hidden');
+      } catch (err) {
+        toast(err.message || 'ย่อรูปไม่สำเร็จ');
+      }
+    };
+
+    function compressImage(file, maxWidth, quality) {
+      return new Promise(function (resolve, reject) {
+        var reader = new FileReader();
+        reader.onerror = function () { reject(new Error('อ่านไฟล์ไม่สำเร็จ')); };
+        reader.onload = function () {
+          var img = new Image();
+          img.onload = function () {
+            var scale = Math.min(1, maxWidth / img.width);
+            var w = Math.round(img.width * scale);
+            var h = Math.round(img.height * scale);
+            var canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            var ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            var dataUrl = canvas.toDataURL('image/jpeg', quality);
+            resolve({
+              dataUrl: dataUrl,
+              base64: dataUrl.split(',')[1],
+              mime: 'image/jpeg'
+            });
+          };
+          img.onerror = function () { reject(new Error('เปิดรูปไม่สำเร็จ')); };
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    $('btn-submit').onclick = async function () {
+      var amount = Number($('amount').value);
+      var transferDt = $('transfer-dt').value;
+      var note = $('note').value.trim();
+      if (!(amount > 0)) {
+        toast('กรอกยอดเงินให้ถูกต้อง');
+        return;
+      }
+      if (!transferDt) {
+        toast('ระบุวันเวลาที่โอน');
+        return;
+      }
+      if (!state.compressedSlip) {
+        toast('แนบสลิปก่อนส่ง');
+        return;
+      }
+
+      var btn = $('btn-submit');
+      btn.disabled = true;
+      var old = btn.textContent;
+      btn.textContent = 'กำลังส่ง…';
+      try {
+        var data = await api('submitPayment', {
+          member_id: state.member.member_id,
+          amount: amount,
+          transfer_datetime: transferDt,
+          note: note,
+          file_base64: state.compressedSlip.base64,
+          file_mime_type: state.compressedSlip.mime
+        });
+        $('success-text').textContent =
+          'รหัสรายการ ' + data.transaction_id + ' · ยอด ' + formatMoney(amount) + ' บาท · รอเหรัญญิกตรวจสอบ';
+        showView('success');
+        $('amount').value = '';
+        $('note').value = '';
+        $('slip').value = '';
+        state.compressedSlip = null;
+        $('slip-preview').classList.add('hidden');
+      } catch (err) {
+        toast(err.message || String(err));
+      } finally {
+        btn.disabled = false;
+        btn.textContent = old;
+      }
+    };
+
+    async function loadHistory() {
+      var box = $('history-list');
+      box.innerHTML = '<p class="text-sm" style="color:var(--muted)">กำลังโหลด…</p>';
+      try {
+        var data = await api('getMyTransactions', {});
+        if (data.member) {
+          state.member = data.member;
+          $('home-total').textContent = formatMoney(state.member.total_paid);
+        }
+        var list = data.transactions || [];
+        if (!list.length) {
+          box.innerHTML = '<p class="text-sm" style="color:var(--muted)">ยังไม่มีรายการ</p>';
+          return;
+        }
+        box.innerHTML = '';
+        list.forEach(function (tx) {
+          var el = document.createElement('div');
+          el.className = 'rounded-xl border p-3';
+          el.style.borderColor = 'var(--line)';
+          var badgeClass = 'badge-pending';
+          if (tx.status === 'Approved') badgeClass = 'badge-approved';
+          if (tx.status === 'Rejected') badgeClass = 'badge-rejected';
+          el.innerHTML =
+            '<div class="flex items-center justify-between gap-2">' +
+              '<p class="font-semibold">' + formatMoney(tx.amount) + ' บาท</p>' +
+              '<span class="badge ' + badgeClass + '">' + tx.status + '</span>' +
+            '</div>' +
+            '<p class="text-xs mt-1" style="color:var(--muted)">' + tx.transaction_id + '</p>' +
+            '<p class="text-sm mt-1" style="color:var(--muted)">โอน: ' + (tx.transfer_datetime || '—') + '</p>' +
+            (tx.status === 'Rejected' && tx.reject_reason
+              ? '<p class="text-sm mt-1" style="color:var(--danger)">เหตุผล: ' + escapeHtml(tx.reject_reason) + '</p>'
+              : '');
+          box.appendChild(el);
+        });
+      } catch (err) {
+        box.innerHTML = '<p class="text-sm" style="color:var(--danger)">' + escapeHtml(err.message || String(err)) + '</p>';
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    $('btn-success-home').onclick = async function () {
+      showView('loading');
+      try {
+        await refreshUser();
+      } catch (err) {
+        $('error-text').textContent = err.message || String(err);
+        showView('error');
+      }
+    };
+
+    $('btn-close').onclick = function () {
+      if (!state.mock && typeof liff !== 'undefined' && liff.isInClient && liff.isInClient()) {
+        liff.closeWindow();
+      } else {
+        toast('ปิดแท็บนี้ได้เลย');
+      }
+    };
+
+    boot();
+  </script>
+</body>
+</html>
