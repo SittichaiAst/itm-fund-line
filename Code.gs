@@ -178,7 +178,8 @@ function menuUnbindSelected() {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    sheet.getRange(row, 4, row, 6).setValues([['', '', '']]);
+    // getRange(row, column, numRows, numColumns) — not endRow/endColumn
+    sheet.getRange(row, 4, 1, 3).setValues([['', '', '']]);
     ui.alert('Unbind แล้ว — สมาชิกผูกใหม่ได้จาก LIFF');
   } finally {
     lock.releaseLock();
@@ -293,7 +294,8 @@ function apiBindUser(body) {
     }
 
     var now = new Date();
-    sheet.getRange(rowIndex, 4, rowIndex, 6).setValues([[lineUserId, displayName, now]]);
+    // getRange(row, column, numRows, numColumns) — not endRow/endColumn
+    sheet.getRange(rowIndex, 4, 1, 3).setValues([[lineUserId, displayName, now]]);
 
     var member = findMemberByLineUserId_(lineUserId);
     return { status: 'success', member: publicMember_(member), bank: getPublicConfig_() };
@@ -589,7 +591,7 @@ function getSelectedTransactionRow_() {
 
 function readTransactionRow_(row) {
   var sheet = getTransactionsSheet_();
-  var values = sheet.getRange(row, 1, row, 13).getValues()[0];
+  var values = sheet.getRange(row, 1, 1, 13).getValues()[0];
   return {
     row: row,
     transaction_id: String(values[0] || ''),
