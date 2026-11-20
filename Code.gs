@@ -50,6 +50,9 @@ function doPost(e) {
       case 'checkUser':
         result = apiCheckUser(body);
         break;
+      case 'lookupMember':
+        result = apiLookupMember(body);
+        break;
       case 'bindUser':
         result = apiBindUser(body);
         break;
@@ -226,8 +229,33 @@ function apiCheckUser(body) {
 
   return {
     status: 'unbound',
-    available_members: listUnboundMembers_(),
     bank: config
+  };
+}
+
+/** Lookup by member_id only — does not return the full unbound roster. */
+function apiLookupMember(body) {
+  authenticateLineUser_(body);
+  var memberId = String(body.member_id || '').trim();
+  if (!memberId) {
+    throw new Error('กรุณากรอกรหัสสมาชิก');
+  }
+
+  var member = findMemberByMemberId_(memberId);
+  if (!member) {
+    throw new Error('ไม่พบรหัสสมาชิกนี้');
+  }
+  if (member.line_user_id) {
+    throw new Error('รหัสนี้ถูกผูกบัญชีไปแล้ว');
+  }
+
+  return {
+    status: 'ok',
+    member: {
+      member_id: member.member_id,
+      full_name: member.full_name,
+      nickname: member.nickname
+    }
   };
 }
 
@@ -487,19 +515,15 @@ function findMemberByLineUserId_(lineUserId) {
   return null;
 }
 
-function listUnboundMembers_() {
+function findMemberByMemberId_(memberId) {
   var sheet = getMembersSheet_();
   var data = sheet.getDataRange().getValues();
-  var list = [];
   for (var i = 1; i < data.length; i++) {
-    if (String(data[i][3] || '')) continue;
-    list.push({
-      member_id: String(data[i][0] || ''),
-      full_name: String(data[i][1] || ''),
-      nickname: String(data[i][2] || '')
-    });
+    if (String(data[i][0] || '') === String(memberId)) {
+      return memberFromRow_(data[i], i + 1);
+    }
   }
-  return list;
+  return null;
 }
 
 function memberFromRow_(row, rowNumber) {

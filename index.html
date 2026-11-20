@@ -137,10 +137,15 @@
       </div>
       <div class="panel space-y-3">
         <div>
-          <label class="label" for="member-search">ค้นหาสมาชิกที่ยังไม่ผูกบัญชี</label>
-          <input id="member-search" class="input" type="search" placeholder="รหัส / ชื่อ / ชื่อเล่น" autocomplete="off" />
+          <label class="label" for="member-id-input">รหัสสมาชิก</label>
+          <input id="member-id-input" class="input" type="text" inputmode="text" autocomplete="off" placeholder="กรอกรหัสสมาชิกของตนเอง" />
         </div>
-        <div id="member-list" class="max-h-64 overflow-y-auto space-y-2"></div>
+        <button id="btn-lookup" class="btn btn-ghost" type="button">ตรวจสอบรหัส</button>
+        <div id="bind-confirm" class="hidden rounded-xl border p-3 space-y-1" style="border-color:var(--line)">
+          <p class="text-sm" style="color:var(--muted)">ยืนยันว่าเป็นคุณ</p>
+          <p class="font-semibold" id="bind-confirm-name">—</p>
+          <p class="text-sm" id="bind-confirm-id" style="color:var(--muted)">—</p>
+        </div>
         <button id="btn-bind" class="btn btn-primary" type="button" disabled>ยืนยันการผูกบัญชี</button>
       </div>
     </section>
@@ -221,7 +226,7 @@
       mockPassword: '',
       profile: null,
       selectedMemberId: null,
-      availableMembers: [],
+      lookupMember: null,
       member: null,
       bank: null,
       compressedSlip: null
@@ -326,10 +331,16 @@
         renderHome();
         showView('home');
       } else {
-        state.availableMembers = data.available_members || [];
         renderBind();
         showView('bind');
       }
+    }
+
+    function clearBindLookup() {
+      state.selectedMemberId = null;
+      state.lookupMember = null;
+      $('btn-bind').disabled = true;
+      $('bind-confirm').classList.add('hidden');
     }
 
     function renderBind() {
@@ -337,18 +348,35 @@
       if (state.profile.pictureUrl) {
         $('bind-avatar').src = state.profile.pictureUrl;
       }
-      state.selectedMemberId = null;
-      $('btn-bind').disabled = true;
-      $('member-search').value = '';
-      paintMemberList(state.availableMembers);
+      $('member-id-input').value = '';
+      clearBindLookup();
 
-      $('member-search').oninput = function (e) {
-        var q = e.target.value.trim().toLowerCase();
-        var filtered = state.availableMembers.filter(function (m) {
-          var hay = (m.member_id + ' ' + m.full_name + ' ' + m.nickname).toLowerCase();
-          return !q || hay.indexOf(q) !== -1;
-        });
-        paintMemberList(filtered);
+      $('member-id-input').oninput = function () {
+        clearBindLookup();
+      };
+
+      $('btn-lookup').onclick = async function () {
+        var memberId = $('member-id-input').value.trim();
+        if (!memberId) {
+          toast('กรอกรหัสสมาชิกก่อน');
+          return;
+        }
+        $('btn-lookup').disabled = true;
+        try {
+          var data = await api('lookupMember', { member_id: memberId });
+          state.lookupMember = data.member;
+          state.selectedMemberId = data.member.member_id;
+          $('bind-confirm-name').textContent =
+            data.member.full_name + (data.member.nickname ? ' (' + data.member.nickname + ')' : '');
+          $('bind-confirm-id').textContent = 'รหัส ' + data.member.member_id;
+          $('bind-confirm').classList.remove('hidden');
+          $('btn-bind').disabled = false;
+        } catch (err) {
+          clearBindLookup();
+          toast(err.message || String(err));
+        } finally {
+          $('btn-lookup').disabled = false;
+        }
       };
 
       $('btn-bind').onclick = async function () {
@@ -369,31 +397,6 @@
           $('btn-bind').disabled = false;
         }
       };
-    }
-
-    function paintMemberList(list) {
-      var box = $('member-list');
-      box.innerHTML = '';
-      if (!list.length) {
-        box.innerHTML = '<p class="text-sm" style="color:var(--muted)">ไม่พบรายชื่อ</p>';
-        return;
-      }
-      list.forEach(function (m) {
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'w-full text-left panel !p-3';
-        if (state.selectedMemberId === m.member_id) {
-          btn.style.borderColor = 'var(--accent)';
-          btn.style.boxShadow = '0 0 0 2px rgba(15,118,110,.2)';
-        }
-        btn.textContent = m.member_id + ' - ' + m.full_name + ' (' + m.nickname + ')';
-        btn.onclick = function () {
-          state.selectedMemberId = m.member_id;
-          $('btn-bind').disabled = false;
-          paintMemberList(list);
-        };
-        box.appendChild(btn);
-      });
     }
 
     function renderHome() {
