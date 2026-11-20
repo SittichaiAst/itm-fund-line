@@ -3,3 +3,6 @@ bank_name,ธนาคารตัวอย่าง
 account_no,000-0-00000-0
 account_name,ชื่อบัญชีกองทุนรุ่น
 treasurer_emails,treasurer@example.com
+monthly_amount,300
+plan_months,12
+plan_start_date,2026-11-01

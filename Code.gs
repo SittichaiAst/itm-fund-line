@@ -18,7 +18,8 @@ var PROP = {
 var SHEET = {
   MEMBERS: 'Members',
   TRANSACTIONS: 'Transactions',
-  CONFIG: 'Config'
+  CONFIG: 'Config',
+  REMINDERS: 'Reminders'
 };
 
 var STATUS = {
@@ -86,6 +87,7 @@ function onOpen() {
     .addItem('อนุมัติรายการที่เลือก', 'menuApproveSelected')
     .addItem('ปฏิเสธรายการที่เลือก…', 'menuRejectSelected')
     .addSeparator()
+    .addItem('ส่งเตือนคนค้าง', 'menuSendArrearsReminders')
     .addItem('Unbind สมาชิกที่เลือก', 'menuUnbindSelected')
     .addItem('Sync Drive share', 'menuSyncDriveShare')
     .addToUi();
@@ -181,6 +183,47 @@ function menuUnbindSelected() {
     // getRange(row, column, numRows, numColumns) — not endRow/endColumn
     sheet.getRange(row, 4, 1, 3).setValues([['', '', '']]);
     ui.alert('Unbind แล้ว — สมาชิกผูกใหม่ได้จาก LIFF');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Manual reminder: members whose approved total_paid is below
+ * monthIndex * monthly_amount (calendar months from plan_start_date, capped).
+ * Logs every target row to Reminders; pushes LINE when line_user_id exists.
+ */
+function menuSendArrearsReminders() {
+  var ui = SpreadsheetApp.getUi();
+  var plan = getPaymentPlanConfig_();
+  var monthIndex = calcPlanMonthIndex_(plan.startDate, new Date(), plan.planMonths);
+  var expected = monthIndex * plan.monthlyAmount;
+
+  var confirm = ui.alert(
+    'ส่งเตือนคนค้าง',
+    'แผน: เดือนละ ' + plan.monthlyAmount + ' บาท × ' + plan.planMonths + ' เดือน\n'
+      + 'ตอนนี้ถือเป็นเดือนที่ ' + monthIndex + '/' + plan.planMonths + '\n'
+      + 'ยอดที่ควรมีอย่างน้อย: ' + expected.toFixed(2) + ' บาท\n\n'
+      + 'จะบันทึกลงแท็บ Reminders และ push LINE ให้คนที่ผูกบัญชีแล้วและมียอดต่ำกว่าเกณฑ์',
+    ui.ButtonSet.YES_NO
+  );
+  if (confirm !== ui.Button.YES) {
+    return;
+  }
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var result = sendArrearsReminders_(plan, monthIndex, expected);
+    ui.alert(
+      'ส่งเตือนเสร็จ',
+      'คนค้างทั้งหมด: ' + result.arrearsCount + '\n'
+        + 'ส่ง LINE สำเร็จ: ' + result.sent + '\n'
+        + 'ข้าม (ยังไม่ผูก LINE): ' + result.skippedNoLine + '\n'
+        + 'ล้มเหลว: ' + result.failed + '\n'
+        + 'ดูรายละเอียดที่แท็บ Reminders',
+      ui.ButtonSet.OK
+    );
   } finally {
     lock.releaseLock();
   }
@@ -469,6 +512,163 @@ function getConfigSheet_() {
   return getSpreadsheet_().getSheetByName(SHEET.CONFIG);
 }
 
+function getRemindersSheet_() {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET.REMINDERS);
+  if (sheet) {
+    return sheet;
+  }
+  sheet = ss.insertSheet(SHEET.REMINDERS);
+  sheet.appendRow([
+    'sent_at',
+    'member_id',
+    'full_name',
+    'line_user_id',
+    'month_index',
+    'expected_amount',
+    'total_paid',
+    'arrears',
+    'push_status',
+    'error_message'
+  ]);
+  return sheet;
+}
+
+function getPaymentPlanConfig_() {
+  var map = getConfigMap_();
+  var monthly = Number(map.monthly_amount);
+  var months = Number(map.plan_months);
+  if (!(monthly > 0)) {
+    throw new Error('ตั้ง Config monthly_amount ให้มากกว่า 0');
+  }
+  if (!(months > 0)) {
+    throw new Error('ตั้ง Config plan_months ให้มากกว่า 0');
+  }
+  var startRaw = map.plan_start_date;
+  if (!startRaw) {
+    throw new Error('ตั้ง Config plan_start_date (เช่น 2026-11-01)');
+  }
+  var startDate = parseConfigDate_(startRaw);
+  if (!startDate) {
+    throw new Error('plan_start_date อ่านไม่ได้: ' + startRaw);
+  }
+  return {
+    monthlyAmount: monthly,
+    planMonths: Math.floor(months),
+    startDate: startDate
+  };
+}
+
+function parseConfigDate_(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return value;
+  }
+  var s = String(value || '').trim();
+  var m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  }
+  var d = new Date(s);
+  if (!isNaN(d.getTime())) {
+    return d;
+  }
+  return null;
+}
+
+/** Inclusive calendar month index from plan start, capped at planMonths. 0 if before start. */
+function calcPlanMonthIndex_(startDate, now, planMonths) {
+  var start = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+  var current = new Date(now.getFullYear(), now.getMonth(), 1);
+  if (current < start) {
+    return 0;
+  }
+  var idx = (current.getFullYear() - start.getFullYear()) * 12
+    + (current.getMonth() - start.getMonth())
+    + 1;
+  if (idx < 1) {
+    return 0;
+  }
+  return Math.min(idx, planMonths);
+}
+
+function sendArrearsReminders_(plan, monthIndex, expected) {
+  var membersSheet = getMembersSheet_();
+  var data = membersSheet.getDataRange().getValues();
+  var reminders = getRemindersSheet_();
+  var now = new Date();
+  var sent = 0;
+  var failed = 0;
+  var skippedNoLine = 0;
+  var arrearsCount = 0;
+
+  if (monthIndex < 1 || expected <= 0) {
+    return { arrearsCount: 0, sent: 0, skippedNoLine: 0, failed: 0 };
+  }
+
+  for (var i = 1; i < data.length; i++) {
+    var member = memberFromRow_(data[i], i + 1);
+    if (!member.member_id) {
+      continue;
+    }
+    var paid = Number(member.total_paid || 0);
+    if (paid >= expected) {
+      continue;
+    }
+
+    arrearsCount++;
+    var arrears = expected - paid;
+    var pushStatus = '';
+    var errMsg = '';
+
+    if (!member.line_user_id) {
+      pushStatus = 'skipped_no_line';
+      skippedNoLine++;
+    } else {
+      try {
+        var text = buildArrearsReminderText_(member, monthIndex, plan.planMonths, expected, paid, arrears);
+        pushLineText_(member.line_user_id, text);
+        pushStatus = 'sent';
+        sent++;
+      } catch (err) {
+        pushStatus = 'failed';
+        errMsg = String(err.message || err);
+        failed++;
+      }
+    }
+
+    reminders.appendRow([
+      now,
+      member.member_id,
+      member.full_name,
+      member.line_user_id || '',
+      monthIndex,
+      expected,
+      paid,
+      arrears,
+      pushStatus,
+      errMsg
+    ]);
+  }
+
+  return {
+    arrearsCount: arrearsCount,
+    sent: sent,
+    skippedNoLine: skippedNoLine,
+    failed: failed
+  };
+}
+
+function buildArrearsReminderText_(member, monthIndex, planMonths, expected, paid, arrears) {
+  return 'แจ้งเตือนชำระเงินกองทุนรุ่น\n'
+    + 'คุณ ' + member.full_name
+    + (member.nickname ? ' (' + member.nickname + ')' : '') + '\n'
+    + 'ควรชำระสะสมอย่างน้อย ' + expected.toFixed(2) + ' บาท'
+    + ' (เดือนที่ ' + monthIndex + '/' + planMonths + ')\n'
+    + 'ตอนนี้จ่ายแล้ว ' + paid.toFixed(2) + ' บาท\n'
+    + 'ค้างอีก ' + arrears.toFixed(2) + ' บาท\n'
+    + 'เปิด LIFF จาก OA เพื่อแจ้งโอนและแนบสลิป';
+}
+
 function requireProp_(key) {
   var v = PropertiesService.getScriptProperties().getProperty(key);
   if (!v) {
@@ -659,24 +859,25 @@ function ensurePrivateSharedWith_(file, emails) {
 }
 
 function pushRejectMessage_(tx, reason) {
-  var token = PropertiesService.getScriptProperties().getProperty(PROP.LINE_CHANNEL_ACCESS_TOKEN);
-  if (!token) {
-    throw new Error('ตั้ง LINE_CHANNEL_ACCESS_TOKEN ก่อนแจ้ง Reject');
-  }
   if (!tx.line_user_id) {
     throw new Error('รายการไม่มี line_user_id');
   }
-
   var text = 'รายการ ' + tx.transaction_id
     + ' ถูกปฏิเสธ\nยอด ' + Number(tx.amount).toFixed(2) + ' บาท'
     + '\nเหตุผล: ' + reason
     + '\nเปิด LIFF เพื่อส่งใหม่หรือดูประวัติ';
+  pushLineText_(tx.line_user_id, text);
+}
 
+function pushLineText_(lineUserId, text) {
+  var token = PropertiesService.getScriptProperties().getProperty(PROP.LINE_CHANNEL_ACCESS_TOKEN);
+  if (!token) {
+    throw new Error('ตั้ง LINE_CHANNEL_ACCESS_TOKEN ก่อนส่งข้อความ LINE');
+  }
   var payload = {
-    to: tx.line_user_id,
+    to: lineUserId,
     messages: [{ type: 'text', text: text }]
   };
-
   var resp = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
     method: 'post',
     contentType: 'application/json',
