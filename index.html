@@ -361,7 +361,13 @@
           toast('กรอกรหัสสมาชิกก่อน');
           return;
         }
-        $('btn-lookup').disabled = true;
+        var btn = $('btn-lookup');
+        var input = $('member-id-input');
+        var oldLabel = btn.textContent;
+        btn.disabled = true;
+        input.disabled = true;
+        $('btn-bind').disabled = true;
+        btn.textContent = 'กำลังตรวจสอบ…';
         try {
           var data = await api('lookupMember', { member_id: memberId });
           state.lookupMember = data.member;
@@ -375,13 +381,20 @@
           clearBindLookup();
           toast(err.message || String(err));
         } finally {
-          $('btn-lookup').disabled = false;
+          btn.disabled = false;
+          input.disabled = false;
+          btn.textContent = oldLabel;
         }
       };
 
       $('btn-bind').onclick = async function () {
         if (!state.selectedMemberId) return;
-        $('btn-bind').disabled = true;
+        var btn = $('btn-bind');
+        var oldLabel = btn.textContent;
+        btn.disabled = true;
+        $('btn-lookup').disabled = true;
+        $('member-id-input').disabled = true;
+        btn.textContent = 'กำลังผูกบัญชี…';
         try {
           var data = await api('bindUser', {
             member_id: state.selectedMemberId,
@@ -394,7 +407,10 @@
           showView('home');
         } catch (err) {
           toast(err.message || String(err));
-          $('btn-bind').disabled = false;
+          btn.disabled = false;
+          $('btn-lookup').disabled = false;
+          $('member-id-input').disabled = false;
+          btn.textContent = oldLabel;
         }
       };
     }
