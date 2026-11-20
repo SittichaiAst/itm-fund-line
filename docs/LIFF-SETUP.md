@@ -1,133 +1,36 @@
 # วิธีเปิดใช้งาน LINE OA + LIFF (โปรเจกต์กองทุนรุ่น)
 
-คู่มือนี้ครอบคลุมทั้งเส้นสำหรับ **หนึ่งรุ่น (หนึ่ง cohort)** ตาม `docs/DECISIONS.md`:
+คู่มือฉบับเต็มสำหรับ **หนึ่งรุ่น (หนึ่ง cohort)** ตาม `docs/DECISIONS.md`
 
-สร้าง LINE Official Account → Messaging API → **LINE Login + LIFF** → โฮสต์ `index.html` ด้วย **GitHub Pages** → ใส่ค่าในแอปและ Script Properties
+ลำดับใหญ่:
 
-อ้างอิงคอนโซล: [LINE Developers Console](https://developers.line.biz/console/)
+1. GitHub Pages โฮสต์ `index.html`
+2. Google Apps Script (`Code.gs`) เป็น API
+3. LINE: OA + Messaging API + **LINE Login** + LIFF
+4. ใส่ค่า config แล้วทดสอบ
 
----
-
-## สิ่งที่ต้องมีก่อนเริ่ม
-
-- บัญชี LINE ที่ใช้ดูแลรุ่นได้
-- บัญชี GitHub (สำหรับโฮสต์หน้าเว็บ)
-- Google Sheet + Apps Script (`Code.gs`) พร้อม Deploy Web App แล้ว (ได้ URL สำหรับ API)
-- อีเมลเหรัญญิกสำหรับแชร์ Sheet/Drive
-
-> เทสต์ flow โดยไม่พึ่ง LINE ได้ก่อน ด้วย  
-> `https://<user>.github.io/<repo>/?mock=1&pw=รหัส` หลังตั้ง `MOCK_PASSWORD`
+Repo นี้: https://github.com/SittichaiAst/itm-fund-line  
+หน้าเว็บ: https://sittichaiast.github.io/itm-fund-line/  
+คอนโซล LINE: https://developers.line.biz/console/
 
 ---
 
-## สถาปัตยกรรม channel (สำคัญ)
+## ถ้าเจอข้อความนี้บนหน้าเว็บ
 
-LINE **ห้าม** เพิ่ม LIFF บน Messaging API channel แล้ว  
-ต้องแยกเป็น 2 channel ภายใต้ **Provider เดียวกัน**:
+### `ยังไม่ได้ตั้ง LIFF ID ใน APP_CONFIG`
 
-| Channel | ใช้ทำอะไร |
+**ตั้งที่ไฟล์ในเครื่อง/repo — ไม่ใช่ใน LINE Console และไม่ใช่ Script Properties**
+
+| รายการ | ค่า |
 |---|---|
-| **LINE Login** | สร้าง LIFF, ได้ LIFF ID, ออก `id_token` |
-| **Messaging API** (ผูก OA) | Push ตอน Reject, ให้สมาชิกแอดเพื่อน |
+| ไฟล์ | `index.html` (รากโปรเจกต์ ไม่ได้อยู่ใน `docs/`) |
+| ตัวแปร | `APP_CONFIG.liffId` |
+| ค่าที่ได้จาก | LINE Developers → **LINE Login** channel → แท็บ **LIFF** → **LIFF ID** |
 
-| ค่า | เอาจาก channel ไหน | ใส่ที่ |
-|---|---|---|
-| LIFF ID | LINE Login → แท็บ LIFF | `index.html` → `APP_CONFIG.liffId` |
-| Endpoint URL | GitHub Pages URL | หน้าตั้งค่า LIFF |
-| GAS Web App URL | Deploy ของ `Code.gs` | `index.html` → `APP_CONFIG.gasUrl` |
-| `LINE_CHANNEL_ID` | **Channel ID ของ LINE Login** | Script Properties |
-| `LINE_CHANNEL_ACCESS_TOKEN` | **Messaging API** (long-lived) | Script Properties |
+#### วิธีแก้ทีละขั้น
 
-ถ้า Login กับ Messaging API คนละ Provider → `userId` คนละชุด → Reject push จะไม่ถึงคนที่ bind ไว้
-
-เอกสาร LINE: [Create a channel for LIFF](https://developers.line.biz/en/docs/liff/getting-started/)
-
----
-
-## ขั้นที่ 0 — โฮสต์ `index.html` ด้วย GitHub Pages (วิธีหลัก)
-
-โปรเจกต์นี้เสิร์ฟหน้าเว็บจาก **root ของ repo** (`index.html` อยู่ที่รากโปรเจกต์)
-
-### ถ้า repo พร้อมแล้ว
-
-1. เปิด GitHub → เข้า repo → **Settings → Pages**
-2. **Build and deployment → Source**: Deploy from a branch
-3. Branch: `main` / Folder: `/ (root)` → **Save**
-4. รอ 1–3 นาที แล้วเปิด URL รูป:
-
-```text
-https://<github-username>.github.io/<repo-name>/
-```
-
-ตัวอย่าง: `https://sittichaiast.github.io/itm-fund-line/`
-
-5. เทสต์ในเบราว์เซอร์ว่าหน้า “โอน & ส่งสลิป” ขึ้น (อาจยัง error เรื่อง LIFF ID / gasUrl จนกว่าจะใส่ config)
-
-### อัปเดตหน้าเว็บทีหลัง
-
-1. แก้ `index.html` (เช่น `APP_CONFIG`)
-2. `git add` → `git commit` → `git push`
-3. รอ Pages build แล้วรีเฟรช (บางทีต้อง hard refresh)
-
-### สิ่งที่ GitHub Pages **ไม่** ทำ
-
-- ไม่รัน `Code.gs` — API ยังอยู่ที่ Google Apps Script Web App
-- อย่าใส่ Channel access token / `MOCK_PASSWORD` ลงใน repo แบบสาธารณะโดยไม่จำเป็น (ใส่ใน Script Properties)
-
----
-
-## ขั้นที่ 1 — สร้าง LINE Official Account (ถ้ายังไม่มี)
-
-1. ไปที่ [LINE Official Account Manager](https://manager.line.biz/) หรือสร้างผ่าน LINE Developers
-2. สร้าง OA สำหรับรุ่นนี้ (เช่น กองทุนรุ่น XX)
-3. ตั้งรูปโปรไฟล์ / ข้อความต้อนรับตามต้องการ
-
-หมายเหตุ: **หนึ่งรุ่น = หนึ่งชุด OA/channel (แนะนำแยก)** ตามมติ clone ต่อรุ่น
-
----
-
-## ขั้นที่ 2 — สร้าง Messaging API Channel
-
-1. เปิด [LINE Developers Console](https://developers.line.biz/console/)
-2. สร้างหรือเลือก **Provider**
-3. **Create a new channel** → **Messaging API** → ผูก OA
-4. แท็บ **Messaging API** → ออก **Channel access token (long-lived)**  
-   → เก็บเป็น Script Property `LINE_CHANNEL_ACCESS_TOKEN`
-5. Webhook: v1 **ไม่บังคับ** (เหรัญญิกอนุมัติใน Sheet) แต่ต้องมี token สำหรับ Push ตอน Reject
-
-สมาชิกต้อง **แอดเพื่อน OA** ก่อนจึงรับข้อความ Reject ได้
-
----
-
-## ขั้นที่ 3 — สร้าง LINE Login Channel + LIFF
-
-1. ใน **Provider เดียวกับขั้น 2** → **Create a new channel** → **LINE Login**
-2. App types: เลือก **Web app**
-3. เปิดแท็บ **LIFF** → **Add**  
-   (ถ้าไปเพิ่ม LIFF ใน Messaging API จะเจอข้อความว่าใช้ไม่ได้ — ให้กลับมาที่ LINE Login)
-4. กรอกค่า:
-
-| ช่อง | ค่าแนะนำ |
-|---|---|
-| LIFF app name | เช่น `แจ้งชำระเงินรุ่นXX` (ห้ามมีคำว่า LINE) |
-| Size | **Full** |
-| Endpoint URL | URL GitHub Pages เช่น `https://<user>.github.io/<repo>/` |
-| Scope | **`profile`** + **`openid`** (จำเป็นสำหรับ `liff.getIDToken()`) |
-| Add friend option | **On (Aggressive)** หรือ On ปกติ — ผูกกับ OA ของ Messaging API |
-| Scan QR | Off ก็ได้ |
-| Module mode | Off |
-
-5. บันทึกแล้วคัดลอก **LIFF ID**
-6. จาก **Channel basic settings ของ LINE Login** คัดลอก **Channel ID**  
-   → Script Property `LINE_CHANNEL_ID` (ใช้ verify `id_token` — **ไม่ใช่** Channel ID ของ Messaging API)
-
-ลิงก์เปิดแอป: `https://liff.line.me/{LIFF_ID}`
-
----
-
-## ขั้นที่ 4 — ใส่ค่าใน `index.html` แล้ว push
-
-แก้ใน repo:
+1. เปิดไฟล์ `index.html` ใน Cursor / VS Code / บน GitHub กด Edit
+2. หาบล็อกประมาณนี้ (ใน `<script>`):
 
 ```js
 const APP_CONFIG = {
@@ -136,112 +39,297 @@ const APP_CONFIG = {
 };
 ```
 
-ตัวอย่าง:
+3. แทนที่ `'YOUR_LIFF_ID'` ด้วย LIFF ID จริง เช่น `'1234567890-AbCdEfGh'`
+4. ถ้ามี GAS URL แล้ว แทนที่ `'YOUR_GAS_WEB_APP_URL'` ด้วย URL ที่ลงท้าย `/exec`
+5. บันทึกไฟล์ แล้วอัปขึ้น GitHub:
+
+```bash
+git add index.html
+git commit -m "Set LIFF ID and GAS URL in APP_CONFIG"
+git push
+```
+
+6. รอ GitHub Pages 1–3 นาที แล้ว **hard refresh** (`Ctrl+F5`) ที่  
+   https://sittichaiast.github.io/itm-fund-line/
+
+> **อย่าสับสน:**  
+> - ใส่ LIFF ID ใน `index.html` = ให้หน้าเว็บเรียก `liff.init()` ได้  
+> - ใส่ Endpoint URL ใน LINE Console = บอก LINE ว่าจะเปิดหน้าเว็บจาก URL ไหน  
+> - สองอย่างคนละที่ ต้องทำทั้งคู่
+
+### `ยังไม่ได้ตั้ง GAS Web App URL ใน APP_CONFIG`
+
+แก้ที่ไฟล์เดียวกัน: `index.html` → `APP_CONFIG.gasUrl`  
+ค่ามาจาก Apps Script → **Deploy → Web app** → URL แบบ  
+`https://script.google.com/macros/s/XXXX/exec`  
+แล้ว `git push` เช่นเดียวกับด้านบน
+
+---
+
+## แผนที่ค่าทั้งหมด (อ่านก่อนลงมือ)
+
+| ค่า | ได้จากที่ไหน | ใส่ที่ไหน |
+|---|---|---|
+| หน้าเว็บ HTTPS | GitHub Pages | ใช้เป็น LIFF **Endpoint URL** ใน Console |
+| `liffId` | LINE Login → LIFF | **`index.html` → `APP_CONFIG.liffId`** แล้ว push |
+| `gasUrl` | Apps Script Web App | **`index.html` → `APP_CONFIG.gasUrl`** แล้ว push |
+| `LINE_CHANNEL_ID` | Channel ID ของ **LINE Login** | Apps Script → **Script properties** |
+| `LINE_CHANNEL_ACCESS_TOKEN` | Messaging API → long-lived token | Apps Script → **Script properties** |
+| `SHEET_ID` | ID ใน URL Google Sheet | Script properties |
+| `DRIVE_FOLDER_ID` | ID โฟลเดอร์ Drive เก็บสลิป | Script properties |
+| `MOCK_PASSWORD` | ตั้งเอง | Script properties |
+| `LIFF_ID` | (ทางเลือก สำเนาไว้ดู) | Script properties |
+
+**ห้าม** ใส่ Channel access token / `MOCK_PASSWORD` ลงใน `index.html` หรือ repo ถ้าไม่จำเป็น (repo เป็น public)
+
+---
+
+## สถาปัตยกรรม LINE channel (สำคัญ)
+
+LINE **ห้าม** เพิ่ม LIFF บน Messaging API channel  
+ต้องมี 2 channel ภายใต้ **Provider เดียวกัน**:
+
+| Channel | ใช้ทำอะไร |
+|---|---|
+| **LINE Login** | สร้าง LIFF, ได้ LIFF ID, ออก `id_token` |
+| **Messaging API** (ผูก OA) | Push ตอน Reject, ให้สมาชิกแอดเพื่อน |
+
+ถ้า Login กับ Messaging API คนละ Provider → `userId` คนละชุด → Reject push ไม่ถึงคนที่ bind
+
+อ้างอิง: [Create a channel for LIFF](https://developers.line.biz/en/docs/liff/getting-started/)
+
+ข้อความใน Console แบบ *“You can no longer add LIFF apps to a Messaging API channel…”* = ปกติ ให้ไปสร้าง LIFF ที่ **LINE Login** แทน  
+(โซนไทยส่วนใหญ่ยังใช้ LIFF บน Login channel ได้ — LINE MINI App อาจสร้างไม่ได้)
+
+---
+
+## ขั้นที่ 0 — GitHub Pages (โฮสต์ `index.html`)
+
+หน้าเว็บอยู่ที่ **root ของ repo** ไฟล์ชื่อ `index.html`
+
+### ของโปรเจกต์นี้ (เปิดไว้แล้ว)
+
+- Repo: https://github.com/SittichaiAst/itm-fund-line  
+- Pages: https://sittichaiast.github.io/itm-fund-line/  
+- Settings → Pages → Source: branch **`main`**, folder **`/ (root)`**
+
+### ถ้าต้องเปิด Pages ใหม่ใน repo อื่น
+
+1. GitHub → repo → **Settings → Pages**
+2. Deploy from a branch → `main` → `/ (root)` → Save
+3. รอจนสถานะเป็น built (ถ้าเปิดทันทีอาจ 404 ชั่วคราว)
+
+### อัปเดตหน้าเว็บ
+
+แก้ไฟล์ในเครื่อง → `git add` → `git commit` → `git push` → รอ build → hard refresh
+
+Pages **ไม่รัน** `Code.gs` — API อยู่ที่ Google แยก
+
+---
+
+## ขั้นที่ 1 — สร้าง LINE Official Account
+
+1. [LINE Official Account Manager](https://manager.line.biz/) หรือสร้างผ่าน Developers
+2. สร้าง OA สำหรับรุ่น (ชื่อที่สมาชิกรู้จัก)
+3. ตั้งรูป / ข้อความต้อนรับตามต้องการ
+
+หนึ่งรุ่นแนะนำแยกชุด OA/channel
+
+---
+
+## ขั้นที่ 2 — Messaging API Channel
+
+1. [LINE Developers Console](https://developers.line.biz/console/)
+2. สร้าง/เลือก **Provider**
+3. **Create channel** → **Messaging API** → ผูก OA
+4. แท็บ **Messaging API** → ออก **Channel access token (long-lived)**  
+   → เก็บไว้ใส่ Script Property `LINE_CHANNEL_ACCESS_TOKEN`
+5. Webhook: v1 ไม่บังคับ (เหรัญญิกใช้เมนูใน Sheet)
+
+สมาชิกต้อง **แอดเพื่อน OA** ก่อนจึงรับข้อความ Reject ได้
+
+---
+
+## ขั้นที่ 3 — LINE Login Channel + สร้าง LIFF (ได้ LIFF ID)
+
+1. ใน **Provider เดียวกับขั้น 2** → **Create channel** → **LINE Login**
+2. App types: **Web app**
+3. แท็บ **LIFF** → **Add**  
+   (อย่าไป Add ใน Messaging API)
+4. กรอก:
+
+| ช่อง | ค่าแนะนำ |
+|---|---|
+| LIFF app name | เช่น `แจ้งชำระเงินรุ่นXX` (ห้ามมีคำว่า LINE) |
+| Size | **Full** |
+| Endpoint URL | `https://sittichaiast.github.io/itm-fund-line/` |
+| Scope | **`profile`** + **`openid`** (จำเป็นต่อ `liff.getIDToken()`) |
+| Add friend option | On / On (Aggressive) ผูก OA ของ Messaging API |
+| Scan QR | Off ก็ได้ |
+| Module mode | Off |
+
+5. **Add / Update** แล้วคัดลอก **LIFF ID** (รูป `1234567890-AbCdEfGh`)
+6. ไป **Channel basic settings ของ LINE Login** → คัดลอก **Channel ID**  
+   → จะใส่ Script Property `LINE_CHANNEL_ID`  
+   (**ไม่ใช่** Channel ID ของ Messaging API)
+
+ลิงก์เปิดแอปหลังตั้งครบ: `https://liff.line.me/{LIFF_ID}`
+
+---
+
+## ขั้นที่ 4 — ใส่ LIFF ID / GAS URL ใน `index.html` แล้ว push
+
+นี่คือจุดที่แก้ error `ยังไม่ได้ตั้ง LIFF ID ใน APP_CONFIG`
+
+### 4.1 แก้ไฟล์
+
+ไฟล์: [`index.html`](../index.html) ที่รากโปรเจกต์
 
 ```js
 const APP_CONFIG = {
-  liffId: '1234567890-abcdefgh',
+  liffId: 'วาง-LIFF-ID-จากขั้น-3-ที่นี่',
   gasUrl: 'https://script.google.com/macros/s/XXXX/exec'
 };
 ```
 
-จากนั้น:
+- `liffId` = จากขั้น 3  
+- `gasUrl` = จากขั้น 5 (ถ้ายังไม่มี Deploy ใส่ทีหลังได้ แต่หน้าเว็บจะฟ้องเรื่อง gasUrl)
+
+### 4.2 Push ขึ้น GitHub
 
 ```bash
+cd d:\Workspace\itm-fund-line
 git add index.html
-git commit -m "Configure LIFF and GAS URLs"
+git commit -m "Set LIFF ID and GAS URL in APP_CONFIG"
 git push
 ```
 
-รอ GitHub Pages อัปเดต แล้วตั้ง **Endpoint URL** ใน LIFF ให้ชี้ Pages URL เดียวกัน
+### 4.3 ตรวจ
+
+1. รอ Pages อัปเดต  
+2. เปิด https://sittichaiast.github.io/itm-fund-line/ แบบ hard refresh  
+3. ข้อความ “ยังไม่ได้ตั้ง LIFF ID” ต้องหาย  
+4. ตรวจว่า Endpoint ใน LIFF Console ยังเป็น Pages URL ด้านบน
 
 ---
 
-## ขั้นที่ 5 — Deploy Google Apps Script (API เท่านั้น)
+## ขั้นที่ 5 — Deploy `Code.gs` + Script Properties
 
-`Code.gs` ทำหน้าที่ API (`doPost`) — **ไม่ต้อง** ใช้ `doGet` เสิร์ฟหน้าเว็บแล้ว เพราะหน้าเว็บอยู่ที่ GitHub Pages
+`Code.gs` = API (`doPost`) อย่างเดียว ไม่โฮสต์หน้าเว็บ
 
-1. เปิด Google Sheet → **Extensions → Apps Script**
-2. วางโค้ดจาก `Code.gs`
-3. **Project Settings (เฟือง) → Script properties → Add script property**
+### 5.1 วางโค้ด
 
-| Property | ค่า |
+1. เปิด Google Sheet ของรุ่น → **Extensions → Apps Script**
+2. วางเนื้อหาจากไฟล์ `Code.gs` ใน repo
+3. Save
+
+### 5.2 ตั้ง Script Properties
+
+1. ใน Apps Script คลิกไอคอน **เฟือง (Project Settings)** ด้านซ้าย  
+2. เลื่อนไป **Script properties**  
+3. **Add script property** ทีละคู่ แล้ว **Save script properties**
+
+| Property | Value |
 |---|---|
-| `SHEET_ID` | ID ใน URL สเปรดชีต |
-| `DRIVE_FOLDER_ID` | ID โฟลเดอร์สลิป |
-| `LINE_CHANNEL_ID` | Channel ID ของ **LINE Login** |
-| `LINE_CHANNEL_ACCESS_TOKEN` | Token จาก **Messaging API** |
-| `MOCK_PASSWORD` | รหัสสำหรับ `?mock=1` |
-| `LIFF_ID` | (ทางเลือก) |
+| `SHEET_ID` | ส่วนใน URL: `docs.google.com/spreadsheets/d/`**`ID_นี้`**`/edit` |
+| `DRIVE_FOLDER_ID` | ID โฟลเดอร์ Drive เก็บสลิป |
+| `LINE_CHANNEL_ID` | Channel ID ของ **LINE Login** (ขั้น 3) |
+| `LINE_CHANNEL_ACCESS_TOKEN` | Token จาก **Messaging API** (ขั้น 2) |
+| `MOCK_PASSWORD` | รหัสที่ตั้งเอง สำหรับเทสต์ mock |
+| `LIFF_ID` | (ทางเลือก) สำเนา LIFF ID |
 
-วิธีเปิด Script properties: Apps Script → ไอคอนเฟืองซ้าย → หัวข้อ **Script properties** → **Save script properties**
+ชื่อ Property ต้องสะกดตรงนี้เป๊ะ
 
-4. **Deploy → New deployment → Web app**
-   - Execute as: **Me**
-   - Who has access: **Anyone**
-5. คัดลอก Web App URL ไปใส่ `APP_CONFIG.gasUrl` แล้ว push `index.html` อีกครั้ง
-6. แก้ `Code.gs` ทีหลัง → Deploy ใหม่ (New version)
+### 5.3 Deploy Web App
+
+1. **Deploy → New deployment**
+2. Type: **Web app**
+3. Execute as: **Me**
+4. Who has access: **Anyone**
+5. Deploy → คัดลอก URL (`.../exec`)
+6. กลับไปขั้น 4 ใส่ใน `APP_CONFIG.gasUrl` แล้ว push อีกครั้ง
+7. ทุกครั้งที่แก้ `Code.gs` → Deploy ใหม่แบบ **New version บน deployment เดิม** (ดูด้านล่าง)
+
+### ต้องแก้ `gasUrl` ใน git ทุกครั้งที่ Deploy ไหม?
+
+**ไม่ต้อง** — ถ้าอัปเดตโค้ดด้วยวิธีนี้ URL จะเดิม:
+
+1. **Deploy → Manage deployments**
+2. กดดินสอที่ Web app เดิม
+3. Version: **New version**
+4. เก็บ Who has access เป็น **Anyone** แล้ว Deploy
+
+แก้ `index.html` + `git push` **เฉพาะเมื่อ URL เปลี่ยน** เช่น กด **New deployment** แล้วได้ลิงก์ใหม่ หรือลบ deployment เก่าแล้วสร้างใหม่
 
 ---
 
-## ขั้นที่ 6 — เปิดใช้งานให้สมาชิก
+## ขั้นที่ 6 — เปิดให้สมาชิกใช้
 
-1. ลิงก์ LIFF: `https://liff.line.me/{LIFF_ID}`
-2. หรือ Rich Menu / ปุ่มใน OA
+1. ลิงก์หลัก: `https://liff.line.me/{LIFF_ID}`
+2. หรือปุ่ม / Rich Menu ใน OA
 3. หรือ QR จากลิงก์ด้านบน
 
-สมาชิก: login → ผูกบัญชีครั้งแรก → ส่งสลิป → ดูประวัติ  
+**สมาชิก:** เปิด LIFF → login → ผูกบัญชีครั้งแรก → ส่งสลิป → ดูประวัติ  
 
-เหรัญญิก: Sheet (Editor เท่านั้น) → เมนู **กองทุนรุ่น** → อนุมัติ / ปฏิเสธ… / Unbind / Sync Drive share
+**เหรัญญิก:** แชร์ Sheet เฉพาะ Editor → เมนู **กองทุนรุ่น**  
+Approve / Reject… / Unbind / Sync Drive share  
+
+ตอน Reject ระบบ push LINE (ต้องแอดเพื่อน OA แล้ว)
 
 ---
 
 ## ขั้นที่ 7 — Checklist ทดสอบ
 
-### A. Mock บน GitHub Pages
+### A. Mock (ไม่ใช้ LINE login)
+
+ต้องตั้ง `MOCK_PASSWORD` และ `gasUrl` แล้ว
 
 ```text
-https://<user>.github.io/<repo>/?mock=1&pw=รหัส&uid=mock-user-001
+https://sittichaiast.github.io/itm-fund-line/?mock=1&pw=รหัสของคุณ&uid=mock-user-001
 ```
 
 ### B. LIFF จริงบนมือถือ
 
-1. เปิด `https://liff.line.me/{LIFF_ID}` ในแอป LINE
-2. ไม่ error เรื่อง LIFF ID / gasUrl / id_token
-3. ผูกบัญชี + ส่งสลิป → แถว `Pending` ใน Sheet
-4. Reject แล้วได้ข้อความ LINE + เห็นเหตุผลในประวัติ
+1. เปิด `https://liff.line.me/{LIFF_ID}` ในแอป LINE  
+2. ไม่เจอ error LIFF ID / gasUrl / id_token  
+3. ผูกบัญชี + ส่งสลิป → แถว `Pending` ใน Sheet  
+4. Reject พร้อมเหตุผล → ได้ข้อความ LINE + เห็นในประวัติ  
 
-### C. จุดที่พบบ่อย
+### C. ตารางแก้ปัญหา
 
-| อาการ | สาเหตุที่พบบ่อย |
+| อาการ | แก้ที่ |
 |---|---|
-| เพิ่ม LIFF ใน Messaging API ไม่ได้ | ปกติ — ไปสร้างที่ **LINE Login** แทน |
-| หน้า 404 บน github.io | ยังไม่เปิด Pages / branch ไม่ใช่ `main` / รอ build |
-| `ยังไม่ได้ตั้ง LIFF ID` | ยังไม่แก้ `APP_CONFIG` หรือยังไม่ push |
-| `ไม่ได้รับ LINE ID token` | ลืม scope **`openid`** |
-| `LINE verify failed` | ใส่ Channel ID ของ Messaging API แทน Login |
-| Reject แล้วไม่ถึง LINE | ยังไม่แอดเพื่อน OA / token ผิด / คนละ Provider |
-| เปิด LIFF แล้วหน้าเก่า | รอ Pages deploy หรือ hard refresh |
+| `ยังไม่ได้ตั้ง LIFF ID ใน APP_CONFIG` | แก้ `index.html` → `APP_CONFIG.liffId` แล้ว **push** + hard refresh |
+| `ยังไม่ได้ตั้ง GAS Web App URL` | แก้ `APP_CONFIG.gasUrl` แล้ว push |
+| เพิ่ม LIFF ใน Messaging API ไม่ได้ | ไปสร้างที่ **LINE Login** |
+| github.io 404 | รอ Pages build / ตรวจ Settings → Pages |
+| แก้แล้วแต่หน้าเก่ายังฟ้อง | ยังไม่ push / cache — รอ build + `Ctrl+F5` |
+| `ไม่ได้รับ LINE ID token` | เปิด scope **`openid`** ใน LIFF |
+| `LINE verify failed` | `LINE_CHANNEL_ID` ต้องเป็นของ **LINE Login** |
+| Reject แล้วไม่ถึง LINE | แอดเพื่อน OA / ตรวจ token / คนละ Provider |
+| ส่งสลิปไม่เข้า Sheet | ตรวจ `gasUrl` เป็น `/exec` ล่าสุด และ Script properties |
 
 ---
 
 ## หลายรุ่น (clone)
 
 1. Sheet + Drive + GAS deployment ใหม่  
-2. (แนะนำ) OA / Login+Messaging แยก หรืออย่างน้อย LIFF แยก  
-3. ถ้าใช้ repo เดียวกัน: ต้องแยกหน้า/ config ต่อรุ่น (หรือแยก repo)  
-4. แชร์ `https://liff.line.me/{LIFF_ID}` คนละอัน
+2. (แนะนำ) ชุด Login + Messaging แยก หรืออย่างน้อย LIFF แยก  
+3. `APP_CONFIG` คนละชุด (`liffId` + `gasUrl`) — ถ้า repo เดียวต้องแยกหน้า/โฟลเดอร์ หรือแยก repo  
+4. แชร์ `https://liff.line.me/{LIFF_ID}` คนละอัน  
+
+อย่าใช้ LIFF ID / GAS URL ข้ามรุ่น
 
 ---
 
-## ลำดับที่แนะนำเมื่อเริ่มจากศูนย์
+## ลำดับแนะนำเมื่อเริ่มจากศูนย์
 
-1. สร้าง Sheet จาก `sheets/*.csv` + รายชื่อ + `Config`
-2. Deploy `Code.gs` + Script Properties (`MOCK_PASSWORD` ก่อนก็ได้)
-3. เปิด GitHub Pages → เทสต์ `?mock=1`
-4. สร้าง OA + Messaging API + LINE Login + LIFF (Endpoint = Pages URL)
-5. ใส่ `liffId` / `gasUrl` ใน `index.html` แล้ว push
-6. เทสต์บนมือถือใน LINE
-7. เปิดลิงก์ให้สมาชิก
+1. สร้าง Sheet จาก `sheets/*.csv` + รายชื่อ + แท็บ `Config`  
+2. Deploy `Code.gs` + ตั้ง Script Properties (`MOCK_PASSWORD` ก่อนก็ได้)  
+3. เปิด GitHub Pages → เทสต์ `?mock=1` (หลังมี `gasUrl`)  
+4. สร้าง OA + Messaging API + LINE Login + LIFF (Endpoint = Pages URL)  
+5. **ใส่ `liffId` / `gasUrl` ใน `index.html` แล้ว `git push`**  
+6. เทสต์ในแอป LINE  
+7. แจกลิงก์ `https://liff.line.me/{LIFF_ID}` ให้สมาชิก  
 
-ดู checklist สั้นใน `docs/DECISIONS.md`
+รายการสั้นเพิ่มใน `docs/DECISIONS.md`
