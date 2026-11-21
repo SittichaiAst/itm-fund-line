@@ -78,7 +78,10 @@
       border: 1px solid #f3efda66;
     }
     .input {
+      box-sizing: border-box;
       width: 100%;
+      max-width: 100%;
+      min-width: 0;
       border: 1px solid #ffffff55;
       border-radius: 0.75rem;
       padding: 0.75rem 0.85rem;
@@ -95,6 +98,16 @@
     input[type="datetime-local"],
     input[type="number"],
     input[type="file"] { color-scheme: dark; }
+    /* Native datetime-local has a large intrinsic min-width; keep it inside the panel on mobile. */
+    input[type="datetime-local"] {
+      max-width: 100%;
+      min-width: 0;
+      width: 100%;
+    }
+    .field {
+      min-width: 0;
+      max-width: 100%;
+    }
     .label {
       display: block;
       font-size: 0.85rem;
@@ -258,7 +271,7 @@
           <label class="label" for="amount">ยอดเงินที่โอน (บาท)</label>
           <input id="amount" class="input" type="number" min="0.01" step="0.01" inputmode="decimal" required />
         </div>
-        <div>
+        <div class="field">
           <label class="label" for="transfer-dt">วันและเวลาที่โอน</label>
           <input id="transfer-dt" class="input" type="datetime-local" required />
         </div>
