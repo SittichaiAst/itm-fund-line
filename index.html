@@ -212,6 +212,27 @@
       background: var(--gold);
       border: 2px solid var(--cream);
     }
+    /* Primary receive-account bank row (บัญชีรับโอน only) */
+    .bank-name-row {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      margin-bottom: 0.35rem;
+    }
+    .bank-logo {
+      width: 3rem;
+      height: 3rem;
+      flex-shrink: 0;
+      border-radius: 0.55rem;
+      object-fit: cover;
+      box-shadow: 0 0 0 1px #ffffff22;
+    }
+    .bank-name-text {
+      font-size: 0.95rem;
+      font-weight: 700;
+      line-height: 1.25;
+      color: var(--cream);
+    }
   </style>
 </head>
 <body>
@@ -276,7 +297,7 @@
 
       <div class="panel space-y-2">
         <p class="font-semibold">บัญชีรับโอน</p>
-        <p id="bank-lines" class="text-sm leading-relaxed" style="color:var(--muted)">—</p>
+        <div id="bank-lines" class="text-sm leading-relaxed" style="color:var(--muted)">—</div>
         <button class="btn btn-ghost" type="button" id="btn-copy-account">คัดลอกเลขบัญชี</button>
       </div>
 
@@ -412,6 +433,25 @@
       try {
         var params = qs();
         state.mock = params.get('mock') === '1';
+
+        /* Local/UI preview of บัญชีรับโอน (no LIFF). */
+        if (params.get('previewBank') === '1') {
+          state.member = {
+            member_id: '6900001',
+            full_name: 'ตัวอย่าง สมาชิก',
+            nickname: 'ตัวอย่าง',
+            total_paid: 900
+          };
+          state.bank = {
+            bank_name: 'ธนาคารไทยพาณิชย์',
+            account_name: 'ชื่อบัญชีกองทุนรุ่น',
+            account_no: '000-0-00000-0'
+          };
+          state.plan = null;
+          renderHome();
+          showView('home');
+          return;
+        }
 
         if (state.mock) {
           state.mockPassword = params.get('pw') || window.prompt('รหัส mock (MOCK_PASSWORD)') || '';
@@ -629,10 +669,16 @@
 
     function renderBank() {
       var b = state.bank || {};
+      var bankName = escapeHtml(b.bank_name || '—');
+      var accountName = escapeHtml(b.account_name || '—');
+      var accountNo = escapeHtml(b.account_no || '—');
       $('bank-lines').innerHTML =
-        (b.bank_name || '—') + '<br/>' +
-        (b.account_name || '—') + '<br/>' +
-        '<span class="font-semibold" style="color:var(--gold)">' + (b.account_no || '—') + '</span>';
+        '<div class="bank-name-row">' +
+          '<img class="bank-logo" src="assets/scb-logo.png" width="48" height="48" alt="SCB" />' +
+          '<span class="bank-name-text">' + bankName + '</span>' +
+        '</div>' +
+        accountName + '<br/>' +
+        '<span class="font-semibold" style="color:var(--gold)">' + accountNo + '</span>';
     }
 
     function showPayPane() {
