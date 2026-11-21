@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SCB">
+  <!-- Local static SCB UI mark (purple/magenta). Not loaded from a CDN. -->
+  <defs>
+    <linearGradient id="scbField" x1="8" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7A2F96"/>
+      <stop offset=".45" stop-color="#4E2A84"/>
+      <stop offset="1" stop-color="#3A1768"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#scbField)"/>
+  <!-- Compact white SCB wordmark for bank-row recognition -->
+  <text x="32" y="39" text-anchor="middle" font-family="Arial Black, Helvetica Neue, Arial, sans-serif"
+        font-size="20" font-weight="800" letter-spacing="0.5" fill="#FFFFFF">SCB</text>
+</svg>
