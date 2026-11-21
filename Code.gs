@@ -108,8 +108,16 @@ function menuApproveSelected() {
 
     writeTransactionReview_(row, STATUS.APPROVED, '', now, reviewedBy);
     recomputeMemberTotalPaid_(tx.member_id);
+    var member = findMemberByMemberId_(tx.member_id);
+    var pushNote = '';
+    try {
+      pushApproveMessage_(tx, member);
+      pushNote = '\nแจ้ง LINE แล้ว';
+    } catch (err) {
+      pushNote = '\nอนุมัติแล้ว แต่แจ้ง LINE ไม่สำเร็จ: ' + String(err.message || err);
+    }
 
-    ui.alert('อนุมัติแล้ว: ' + tx.transaction_id);
+    ui.alert('อนุมัติแล้ว: ' + tx.transaction_id + pushNote);
   } finally {
     lock.releaseLock();
   }
@@ -895,11 +903,28 @@ function ensurePrivateSharedWith_(file, emails) {
   });
 }
 
+function pushApproveMessage_(tx, member) {
+  if (!tx.line_user_id) {
+    throw new Error('รายการไม่มี line_user_id');
+  }
+  var amount = Number(tx.amount || 0).toFixed(2);
+  var text = '✅🎉 ยอดโอนของท่าน ' + amount + ' บาท ได้ถูกอนุมัติแล้ว';
+  var plan = getPublicPlan_();
+  if (plan && Number(plan.plan_total) > 0) {
+    var paid = Number(member && member.total_paid || 0);
+    var remaining = Math.max(0, Number(plan.plan_total) - paid);
+    text += '\nยอดคงเหลือ ' + remaining.toFixed(2) + ' บาท ถึงเป้าแผน '
+      + Number(plan.plan_total).toFixed(2) + ' บาท';
+  }
+  text += '\nเปิด LIFF จาก OA เพื่อดูความคืบหน้าได้ตลอด ✨';
+  pushLineText_(tx.line_user_id, text);
+}
+
 function pushRejectMessage_(tx, reason) {
   if (!tx.line_user_id) {
     throw new Error('รายการไม่มี line_user_id');
   }
-  var text = 'รายการ ' + tx.transaction_id
+  var text = '❌ รายการ ' + tx.transaction_id
     + ' ถูกปฏิเสธ\nยอด ' + Number(tx.amount).toFixed(2) + ' บาท'
     + '\nเหตุผล: ' + reason
     + '\nเปิด LIFF เพื่อส่งใหม่หรือดูประวัติ';

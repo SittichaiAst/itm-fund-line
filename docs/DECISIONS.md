@@ -19,7 +19,7 @@ Status: agreed via grill session; this doc overrides the SRS where they conflict
 | Arrears reminder | Config `monthly_amount` / `plan_months` / `plan_start_date`; menu ส่งเตือนคนค้าง; log `Reminders` + LINE push |
 | Plan progress UI | Bar = Approved Total / Plan Total; marker = Expected To Date; hide if plan not started / Config incomplete |
 | Bank account | `Config` sheet tab (editable without redeploy) |
-| Notify | No chat message on successful submit; Messaging API push on **Reject** only |
+| Notify | No chat on submit; Messaging API push on **Approve** (amount + remaining to plan) and **Reject** |
 | History | Member sees own transactions (Pending / Approved / Rejected + reason) |
 | Duplicates | Allow; treasurer filters manually |
 | Secrets | Script Properties only (never in Sheet) |
