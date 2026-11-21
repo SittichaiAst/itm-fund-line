@@ -183,7 +183,10 @@
       width: 0%;
       border-radius: 999px;
       background: linear-gradient(90deg, #c9a84a, var(--gold));
-      transition: width .35s ease;
+      transition: width .35s ease, background .35s ease;
+    }
+    .progress-fill.is-on-track {
+      background: linear-gradient(90deg, #1f7a4d, #3dbe7a);
     }
     .progress-marker {
       position: absolute;
@@ -589,7 +592,9 @@
 
     function renderPlanProgress(plan, totalPaid) {
       var box = $('plan-progress');
+      var fill = $('progress-fill');
       if (!plan || !(Number(plan.plan_total) > 0) || !(Number(plan.month_index) > 0)) {
+        fill.classList.remove('is-on-track');
         box.classList.add('hidden');
         return;
       }
@@ -611,7 +616,8 @@
         status = 'ค้างอีก ' + formatMoney(arrears) + ' บาท ถึงเป้าเดือนนี้';
       }
 
-      $('progress-fill').style.width = pct.toFixed(1) + '%';
+      fill.style.width = pct.toFixed(1) + '%';
+      fill.classList.toggle('is-on-track', paid >= expected);
       $('progress-marker').style.left = markerPct.toFixed(1) + '%';
       $('progress-line').textContent =
         formatMoney(paid) + ' / ' + formatMoney(planTotal) + ' บาท · '
