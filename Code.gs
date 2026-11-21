@@ -293,12 +293,12 @@ function apiLookupMember(body) {
   authenticateLineUser_(body);
   var memberId = String(body.member_id || '').trim();
   if (!memberId) {
-    throw new Error('กรุณากรอกรหัสสมาชิก');
+    throw new Error('กรุณากรอกรหัสนักศึกษา');
   }
 
   var member = findMemberByMemberId_(memberId);
   if (!member) {
-    throw new Error('ไม่พบรหัสสมาชิกนี้');
+    throw new Error('ไม่พบรหัสนักศึกษานี้');
   }
   if (member.line_user_id) {
     throw new Error('รหัสนี้ถูกผูกบัญชีไปแล้ว');
